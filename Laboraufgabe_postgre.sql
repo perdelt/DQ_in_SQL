@@ -186,8 +186,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- dq_anomaly
-DROP FUNCTION IF EXISTS dq_anomaly(VARCHAR, VARCHAR);
-CREATE OR REPLACE FUNCTION dq_anomaly(pTable VARCHAR, pColumn VARCHAR)
+DROP FUNCTION IF EXISTS dq_anomaly_json(VARCHAR, VARCHAR);
+CREATE OR REPLACE FUNCTION dq_anomaly_json(pTable VARCHAR, pColumn VARCHAR)
 RETURNS TABLE(record JSON) AS $$
 BEGIN
   RETURN QUERY EXECUTE format('
@@ -200,17 +200,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP FUNCTION IF EXISTS dq_anomaly2(VARCHAR, VARCHAR);
-CREATE OR REPLACE FUNCTION dq_anomaly2(pTable VARCHAR, pColumn VARCHAR)
+DROP FUNCTION IF EXISTS dq_anomaly(VARCHAR, VARCHAR);
+CREATE OR REPLACE FUNCTION dq_anomaly(pTable VARCHAR, pColumn VARCHAR)
 RETURNS TABLE(anomaly numeric) AS $$
 BEGIN
   RETURN QUERY EXECUTE format('
     WITH statistic AS (
       SELECT AVG(%I) AS mittelwert, STDDEV(%I) AS standardabweichung FROM %I
-    )
-    SELECT %I::numeric 
+    ),
+	anomalies as(
+    SELECT * 
     FROM %I t, statistic s 
-    WHERE ABS(t.%I - s.mittelwert) >= 2 * s.standardabweichung', pColumn, pColumn, pTable, pColumn, pTable, pColumn);
+    WHERE ABS(t.%I - s.mittelwert) >= 2 * s.standardabweichung
+	)
+	select (select count(*)::numeric from anomalies)/(select count(%I)::numeric from %I);', 
+	pColumn, pColumn, pTable, pTable, pColumn, pColumn, pTable);
 END;
 $$ LANGUAGE plpgsql;
 

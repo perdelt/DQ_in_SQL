@@ -1,6 +1,7 @@
 DELIMITER $$ 
 SET sql_notes = 0$$ #temporär Warnungen ausschalten
 
+
 ## dq_quartile
 
 CREATE TABLE IF NOT EXISTS `dq_t_quartile` (

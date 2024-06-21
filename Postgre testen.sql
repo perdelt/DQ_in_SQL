@@ -66,16 +66,18 @@ WITH statistic AS (
     AVG(alterinjahren) AS mittelwert,
     STDDEV(alterinjahren) AS standardabweichung
   FROM t_person
+),
+anomalies as (
+SELECT * FROM t_person t, statistic s
+WHERE ABS(t.alterinjahren - s.mittelwert) >= 2 * s.standardabweichung
 )
-SELECT t.*
-FROM t_person t, statistic s
-WHERE ABS(t.alterinjahren - s.mittelwert) >= 2 * s.standardabweichung;
+select (select count(*)::numeric from anomalies)/(select count(alterinjahren)::numeric from t_person);
 
-with anomaly as (select dq_anomaly('t_person', 'alterinjahren'))
-select dq_anomaly::json->'alterinjahren' as test from anomaly; 
+-- speichert nur Kennzahl (Anteil anomale Daten)
+select dq_anomaly('t_person', 'alterinjahren');
 
-select (select dq_anomaly('t_person', 'alterinjahren'))::json->'alterinjahren' as "alter";
-select dq_anomaly2('t_person', 'alterinjahren');
+with anomaly as (select dq_anomaly_json('t_person', 'alterinjahren'))
+select dq_anomaly_json::json->'alterinjahren' as anomaly from anomaly; 
 
 -- Histogramm
 WITH Histogram AS (
