@@ -14,14 +14,14 @@ SELECT
   MAX(alterInJahren) AS "max"
 FROM statistic;
 
-SELECT * from public.dq_quartile('t_person', 'alterinjahren'); 
-select dq_quartile_entry('stud_wilke','t_person', 'alterinjahren');
+SELECT * from public.dq_quartile('stud_wilke','public','t_person', 'alterinjahren'); 
+select dq_quartile_entry('stud_wilke','public','t_person', 'alterinjahren');
 
 -- Duplicates Check
 SELECT COUNT(lieferant) - COUNT(DISTINCT lieferant) AS zahl_duplikate
 FROM t_liefert;
 
-select dq_duplicates('t_liefert','lieferant');
+select dq_duplicates('stud_wilke','public','t_liefert','lieferant');
 
 -- Summary Statistik
 SELECT
@@ -34,8 +34,8 @@ SELECT
   STDDEV(alterInJahren) AS standardabweichung
 FROM t_person;
 
-select * from dq_summary('t_person', 'alterinjahren');
-select dq_summary_entry('stud_wilke','t_person', 'alterinjahren');
+select * from dq_summary('stud_wilke','public','t_person', 'alterinjahren');
+select dq_summary_entry('stud_wilke','public','t_person', 'alterinjahren');
 
 -- Percentile Berechnung
 SELECT
@@ -43,7 +43,7 @@ SELECT
   PERCENT_RANK() OVER (ORDER BY alterInJahren) AS percentile_rank
 FROM t_person;
 
-select * from dq_percentile('t_person', 'alterinjahren');
+select * from dq_percentile('stud_wilke','public', 't_person', 'alterinjahren');
 
 -- Top Percentile Berechnung
 WITH percent AS (
@@ -57,8 +57,8 @@ SELECT
   (SELECT MAX(alterInJahren) FROM percent WHERE percentile_rank <= 0.95) AS "95% percentile",
   (SELECT MAX(alterInJahren) FROM percent WHERE percentile_rank <= 0.99) AS "99% percentile";
  
-select * from dq_percentile_top('t_person', 'alterinjahren');
-select dq_percentile_top_entry('stud_wilke','t_person', 'alterinjahren');
+select * from dq_percentile_top('stud_wilke','public','t_person', 'alterinjahren');
+select dq_percentile_top_entry('stud_wilke','public','t_person', 'alterinjahren');
 
 -- Anomalie
 WITH statistic AS (
@@ -74,9 +74,9 @@ WHERE ABS(t.alterinjahren - s.mittelwert) >= 2 * s.standardabweichung
 select (select count(*)::numeric from anomalies)/(select count(alterinjahren)::numeric from t_person);
 
 -- speichert nur Kennzahl (Anteil anomale Daten)
-select dq_anomaly('t_person', 'alterinjahren');
+select dq_anomaly('stud_wilke','public','t_person', 'alterinjahren');
 
-with anomaly as (select dq_anomaly_json('t_person', 'alterinjahren'))
+with anomaly as (select dq_anomaly_json('stud_wilke','public','t_person', 'alterinjahren'))
 select dq_anomaly_json::json->'alterinjahren' as anomaly from anomaly; 
 
 -- Histogramm
@@ -89,13 +89,13 @@ SELECT *
 FROM Histogram
 ORDER BY alterInJahren ASC;
 
-select * from dq_histogram('t_person', 'alterinjahren'); 
+select * from dq_histogram('stud_wilke','public','t_person', 'alterinjahren'); 
 
 -- Fehlende Werte
 SELECT COUNT(*) - COUNT(strasse) AS missing_values
 FROM t_person;
 
-select * from dq_missing_values('t_person', 'strasse');  
+select * from dq_missing_values('stud_wilke','public','t_person', 'strasse');  
 
 -- PSI Berechnung
 WITH BaselineCounts AS (
@@ -144,7 +144,8 @@ combined AS (
 SELECT MAX(ABS(cdf1 - cdf2)) AS ks_statistic
 FROM combined;
 
-
+select dq_ks('stud_wilke','public','t_artikelgruppe', 'name','stud_wilke','public','artikelgruppe', 'name');
+select dq_ks_entry('stud_wilke','public','t_artikelgruppe', 'name','stud_wilke','public','artikelgruppe', 'name');
 
 
 
@@ -170,7 +171,9 @@ PSIContributions AS (
   FULL OUTER JOIN ComparisonCounts C ON B."name" = C."name"
 )
 SELECT
-  SUM(psi_contrib * LOG(CASE WHEN comparison_count = 0 THEN NULL
+  SUM(psi_contrib * LOG(CASE 
+	  WHEN comparison_count = 0 THEN null
+  	  WHEN baseline_count = 0 THEN 1e-10
     ELSE baseline_count / comparison_count END)) AS psi
 FROM PSIContributions;
 
@@ -190,6 +193,9 @@ ComparisonCounts AS (
     COALESCE(B.baseline_count, 0) - COALESCE(C.comparison_count, 0) AS psi_contrib
   FROM BaselineCounts B
   full OUTER JOIN ComparisonCounts C ON B."name" = C."name";
+ 
+ CASE WHEN baseline_count = 0 THEN 1e-10 ELSE baseline_count END
+
  
  select sum(lagerbestand) from artikelgruppe;
 
