@@ -252,6 +252,63 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Population-Stability-Index
+
+DROP FUNCTION IF EXISTS dq_PSI(VARCHAR, VARCHAR,VARCHAR, VARCHAR, VARCHAR, VARCHAR,VARCHAR, VARCHAR);
+CREATE OR REPLACE FUNCTION dq_PSI
+(pBaselineDatabase VARCHAR, pBaselineSchemata VARCHAR, pBaselineTable VARCHAR, pBaselineColumn VARCHAR, 
+pComparisonDatabase VARCHAR, pComparisonSchemata VARCHAR, pComparisonTable VARCHAR, pComparisonColumn VARCHAR)
+RETURNS NUMERIC AS $$
+DECLARE
+  PSI NUMERIC;
+BEGIN
+  EXECUTE format('
+WITH BaselineCounts AS (
+  SELECT %I, COUNT(*) AS baseline_count
+  FROM %I.%I.%I
+  GROUP BY %I
+),
+ComparisonCounts AS (
+  SELECT %I, COUNT(*) AS comparison_count
+  FROM %I.%I.%I
+  GROUP BY %I
+),
+PSIContributions AS (
+  SELECT
+    COALESCE(B.baseline_count, 0) AS baseline_count,
+    COALESCE(C.comparison_count, 0) AS comparison_count,
+    COALESCE(B.baseline_count, 0) - COALESCE(C.comparison_count, 0) AS psi_contrib
+  FROM BaselineCounts B
+  FULL OUTER JOIN ComparisonCounts C ON B.%I = C.%I
+)
+SELECT
+  SUM(psi_contrib * LOG(CASE 
+	  WHEN comparison_count = 0 THEN null
+  	  WHEN baseline_count = 0 THEN 1e-10
+    ELSE baseline_count / comparison_count END))*0.01 AS psi
+FROM PSIContributions', 
+pBaselineColumn, pBaselineDatabase, pBaselineSchemata, pBaselineTable, pBaselineColumn, 
+pComparisonColumn, pComparisonDatabase, pComparisonSchemata, pComparisonTable, pComparisonColumn,
+pBaselineColumn, pComparisonColumn)
+  INTO PSI;
+  RETURN PSI;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TABLE IF NOT EXISTS dq_t_PSI (
+  id SERIAL PRIMARY KEY,
+  baseline_database_name VARCHAR(255) NOT NULL,
+  baseline_schemata_name VARCHAR(255) NOT NULL,
+  baseline_table_name VARCHAR(255) NOT NULL,
+  baseline_column_name VARCHAR(255) NOT NULL,
+  comparison_database_name VARCHAR(255) NOT NULL,
+  comparison_schemata_name VARCHAR(255) NOT NULL,
+  comparison_table_name VARCHAR(255) NOT NULL,
+  comparison_column_name VARCHAR(255) NOT NULL,
+  PSI DECIMAL(14, 4) NULL,
+  time TIMESTAMP DEFAULT NOW()
+);
+
 
 -- Kolmogorov-Smirnov Statistik
 

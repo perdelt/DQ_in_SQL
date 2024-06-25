@@ -148,9 +148,6 @@ select dq_ks('stud_wilke','public','t_artikelgruppe', 'name','stud_wilke','publi
 select dq_ks_entry('stud_wilke','public','t_artikelgruppe', 'name','stud_wilke','public','artikelgruppe', 'name');
 
 
-
-
-
 -- PSI Berechnung
 WITH BaselineCounts AS (
   SELECT "name", COUNT(*) AS baseline_count
@@ -174,8 +171,10 @@ SELECT
   SUM(psi_contrib * LOG(CASE 
 	  WHEN comparison_count = 0 THEN null
   	  WHEN baseline_count = 0 THEN 1e-10
-    ELSE baseline_count / comparison_count END)) AS psi
+    ELSE baseline_count / comparison_count END))*0.01 AS psi
 FROM PSIContributions;
+
+select dq_PSI('stud_wilke','public','t_artikelgruppe', 'name','stud_wilke','public','artikelgruppe', 'name');
 
 WITH BaselineCounts AS (
   SELECT "name", COUNT(*) AS baseline_count
@@ -194,12 +193,7 @@ ComparisonCounts AS (
   FROM BaselineCounts B
   full OUTER JOIN ComparisonCounts C ON B."name" = C."name";
  
- CASE WHEN baseline_count = 0 THEN 1e-10 ELSE baseline_count END
 
- 
- select sum(lagerbestand) from artikelgruppe;
-
-select 5*null;
  
 
 
