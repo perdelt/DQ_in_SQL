@@ -288,9 +288,11 @@ TotalCounts AS (
 ),
 PSICalculation AS (
     SELECT
-        CASE 
-            WHEN P.baseline_count = 0 OR P.comparison_count = 0 THEN 0.05
-            ELSE ((P.comparison_count / T.total_comparison)-(P.baseline_count / T.total_baseline)) * 
+  		((P.comparison_count / T.total_comparison)-(P.baseline_count / T.total_baseline)) * 
+            CASE WHEN P.baseline_count = 0 OR P.comparison_count = 0 THEN 
+            	LN(((P.comparison_count / T.total_comparison)+0.01) / 
+                    ((P.baseline_count / T.total_baseline)+0.01))
+            ELSE
                  LN((P.comparison_count / T.total_comparison) / 
                     (P.baseline_count / T.total_baseline))
         END AS psi_contrib
@@ -354,9 +356,11 @@ TotalCounts AS (
 ),
 PSICalculation AS (
     SELECT
-        CASE 
-            WHEN P.baseline_count = 0 OR P.comparison_count = 0 THEN 0.05
-            ELSE ((P.comparison_count / T.total_comparison)-(P.baseline_count / T.total_baseline)) * 
+  		((P.comparison_count / T.total_comparison)-(P.baseline_count / T.total_baseline)) * 
+            CASE WHEN P.baseline_count = 0 OR P.comparison_count = 0 THEN 
+            	LN(((P.comparison_count / T.total_comparison)+0.01) / 
+                    ((P.baseline_count / T.total_baseline)+0.01))
+            ELSE
                  LN((P.comparison_count / T.total_comparison) / 
                     (P.baseline_count / T.total_baseline))
         END AS psi_contrib
