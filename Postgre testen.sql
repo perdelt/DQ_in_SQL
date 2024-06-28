@@ -149,49 +149,64 @@ select dq_ks_entry('stud_wilke','public','t_artikelgruppe', 'name','stud_wilke',
 
 
 -- PSI Berechnung
+-- Testdaten für PSI --------------------
+
+CREATE TABLE t_baseline (
+    name VARCHAR(50)
+);
+
+CREATE TABLE t_comparison (
+    name VARCHAR(50)
+);
+
+INSERT INTO t_baseline (name) VALUES
+('A'), ('A'), ('A'), ('B'), ('B'), ('C'), ('C'), ('C'), ('C'), ('D');
+
+INSERT INTO t_comparison (name) VALUES
+('A'), ('A'), ('B'), ('B'), ('B'), ('C'), ('C'), ('D'), ('D'), ('E');
+
+-----------------------------------------
+
 WITH BaselineCounts AS (
-  SELECT "name", COUNT(*) AS baseline_count
-  FROM artikelgruppe
-  GROUP BY "name"
+    SELECT "name", COUNT(*) AS baseline_count
+    FROM t_baseline
+    GROUP BY "name"
 ),
 ComparisonCounts AS (
-  SELECT "name", COUNT(*) AS comparison_count
-  FROM t_artikelgruppe
-  GROUP BY "name"
+    SELECT "name", COUNT(*) AS comparison_count
+    FROM t_comparison
+    GROUP BY "name"
 ),
 PSIContributions AS (
-  SELECT
-    COALESCE(B.baseline_count, 0) AS baseline_count,
-    COALESCE(C.comparison_count, 0) AS comparison_count,
-    COALESCE(B.baseline_count, 0) - COALESCE(C.comparison_count, 0) AS psi_contrib
-  FROM BaselineCounts B
-  FULL OUTER JOIN ComparisonCounts C ON B."name" = C."name"
-)
-SELECT
-  SUM(psi_contrib * LOG(CASE 
-	  WHEN comparison_count = 0 THEN null
-  	  WHEN baseline_count = 0 THEN 1e-10
-    ELSE baseline_count / comparison_count END))*0.01 AS psi
-FROM PSIContributions;
-
-select dq_PSI('stud_wilke','public','t_artikelgruppe', 'name','stud_wilke','public','artikelgruppe', 'name');
-
-WITH BaselineCounts AS (
-  SELECT "name", COUNT(*) AS baseline_count
-  FROM artikelgruppe
-  GROUP BY "name"
+    SELECT
+        COALESCE(B.baseline_count, 0) AS baseline_count,
+        COALESCE(C.comparison_count, 0) AS comparison_count
+    FROM BaselineCounts B
+    FULL OUTER JOIN ComparisonCounts C ON B."name" = C."name"
 ),
-ComparisonCounts AS (
-  SELECT "name", COUNT(*) AS comparison_count
-  FROM t_artikelgruppe
-  GROUP BY "name"
+TotalCounts AS (
+    SELECT 
+        SUM(baseline_count) AS total_baseline,
+        SUM(comparison_count) AS total_comparison
+    FROM PSIContributions
+),
+PSICalculation AS (
+    SELECT
+        CASE 
+            WHEN P.baseline_count = 0 OR P.comparison_count = 0 THEN 0.05
+            ELSE ((P.comparison_count / T.total_comparison)-(P.baseline_count / T.total_baseline)) * 
+                 LN((P.comparison_count / T.total_comparison) / 
+                    (P.baseline_count / T.total_baseline))
+        END AS psi_contrib
+    FROM PSIContributions P, TotalCounts T
 )
-  Select
-  COALESCE(B.baseline_count, 0) AS baseline_count,
-    COALESCE(C.comparison_count, 0) AS comparison_count,
-    COALESCE(B.baseline_count, 0) - COALESCE(C.comparison_count, 0) AS psi_contrib
-  FROM BaselineCounts B
-  full OUTER JOIN ComparisonCounts C ON B."name" = C."name";
+SELECT SUM(psi_contrib) AS psi
+FROM PSICalculation;
+
+select dq_PSI('stud_wilke','public','t_baseline', 'name','stud_wilke','public','t_comparison', 'name') as psi;
+select dq_PSI_entry('stud_wilke','public','t_baseline', 'name','stud_wilke','public','t_comparison', 'name') as psi;
+
+
  
 
  

@@ -264,29 +264,40 @@ DECLARE
 BEGIN
   EXECUTE format('
 WITH BaselineCounts AS (
-  SELECT %I, COUNT(*) AS baseline_count
-  FROM %I.%I.%I
-  GROUP BY %I
+    SELECT %I, COUNT(*) AS baseline_count
+    FROM %I.%I.%I
+    GROUP BY %I
 ),
 ComparisonCounts AS (
-  SELECT %I, COUNT(*) AS comparison_count
-  FROM %I.%I.%I
-  GROUP BY %I
+    SELECT %I, COUNT(*) AS comparison_count
+    FROM %I.%I.%I
+    GROUP BY %I
 ),
 PSIContributions AS (
-  SELECT
-    COALESCE(B.baseline_count, 0) AS baseline_count,
-    COALESCE(C.comparison_count, 0) AS comparison_count,
-    COALESCE(B.baseline_count, 0) - COALESCE(C.comparison_count, 0) AS psi_contrib
-  FROM BaselineCounts B
-  FULL OUTER JOIN ComparisonCounts C ON B.%I = C.%I
+    SELECT
+        COALESCE(B.baseline_count, 0) AS baseline_count,
+        COALESCE(C.comparison_count, 0) AS comparison_count
+    FROM BaselineCounts B
+    FULL OUTER JOIN ComparisonCounts C ON B.%I = C.%I
+),
+TotalCounts AS (
+    SELECT 
+        SUM(baseline_count) AS total_baseline,
+        SUM(comparison_count) AS total_comparison
+    FROM PSIContributions
+),
+PSICalculation AS (
+    SELECT
+        CASE 
+            WHEN P.baseline_count = 0 OR P.comparison_count = 0 THEN 0.05
+            ELSE ((P.comparison_count / T.total_comparison)-(P.baseline_count / T.total_baseline)) * 
+                 LN((P.comparison_count / T.total_comparison) / 
+                    (P.baseline_count / T.total_baseline))
+        END AS psi_contrib
+    FROM PSIContributions P, TotalCounts T
 )
-SELECT
-  SUM(psi_contrib * LOG(CASE 
-	  WHEN comparison_count = 0 THEN null
-  	  WHEN baseline_count = 0 THEN 1e-10
-    ELSE baseline_count / comparison_count END))*0.01 AS psi
-FROM PSIContributions', 
+SELECT SUM(psi_contrib) AS psi
+FROM PSICalculation', 
 pBaselineColumn, pBaselineDatabase, pBaselineSchemata, pBaselineTable, pBaselineColumn, 
 pComparisonColumn, pComparisonDatabase, pComparisonSchemata, pComparisonTable, pComparisonColumn,
 pBaselineColumn, pComparisonColumn)
@@ -309,6 +320,57 @@ CREATE TABLE IF NOT EXISTS dq_t_PSI (
   time TIMESTAMP DEFAULT NOW()
 );
 
+DROP FUNCTION IF EXISTS dq_PSI_entry(VARCHAR, VARCHAR,VARCHAR, VARCHAR, VARCHAR, VARCHAR,VARCHAR, VARCHAR);
+CREATE OR REPLACE FUNCTION dq_PSI_entry
+(pBaselineDatabase VARCHAR, pBaselineSchemata VARCHAR, pBaselineTable VARCHAR, pBaselineColumn VARCHAR, 
+pComparisonDatabase VARCHAR, pComparisonSchemata VARCHAR, pComparisonTable VARCHAR, pComparisonColumn VARCHAR)
+RETURNS VOID AS $$
+BEGIN
+  EXECUTE format('
+INSERT INTO dq_t_psi(baseline_database_name, baseline_schemata_name, baseline_table_name, baseline_column_name, 
+comparison_database_name, comparison_schemata_name, comparison_table_name, comparison_column_name, psi)
+WITH BaselineCounts AS (
+    SELECT %I, COUNT(*) AS baseline_count
+    FROM %I.%I.%I
+    GROUP BY %I
+),
+ComparisonCounts AS (
+    SELECT %I, COUNT(*) AS comparison_count
+    FROM %I.%I.%I
+    GROUP BY %I
+),
+PSIContributions AS (
+    SELECT
+        COALESCE(B.baseline_count, 0) AS baseline_count,
+        COALESCE(C.comparison_count, 0) AS comparison_count
+    FROM BaselineCounts B
+    FULL OUTER JOIN ComparisonCounts C ON B.%I = C.%I
+),
+TotalCounts AS (
+    SELECT 
+        SUM(baseline_count) AS total_baseline,
+        SUM(comparison_count) AS total_comparison
+    FROM PSIContributions
+),
+PSICalculation AS (
+    SELECT
+        CASE 
+            WHEN P.baseline_count = 0 OR P.comparison_count = 0 THEN 0.05
+            ELSE ((P.comparison_count / T.total_comparison)-(P.baseline_count / T.total_baseline)) * 
+                 LN((P.comparison_count / T.total_comparison) / 
+                    (P.baseline_count / T.total_baseline))
+        END AS psi_contrib
+    FROM PSIContributions P, TotalCounts T
+)
+SELECT %L,%L,%L,%L,%L,%L,%L,%L,SUM(psi_contrib) AS psi
+FROM PSICalculation', 
+pBaselineColumn, pBaselineDatabase, pBaselineSchemata, pBaselineTable, pBaselineColumn, 
+pComparisonColumn, pComparisonDatabase, pComparisonSchemata, pComparisonTable, pComparisonColumn,
+pBaselineColumn, pComparisonColumn,
+pBaselineDatabase, pBaselineSchemata, pBaselineTable, pBaselineColumn, 
+pComparisonDatabase, pComparisonSchemata, pComparisonTable, pComparisonColumn);
+END;
+$$ LANGUAGE plpgsql;
 
 -- Kolmogorov-Smirnov Statistik
 
